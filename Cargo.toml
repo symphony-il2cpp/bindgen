@@ -1,0 +1,9 @@
+[package]
+name = "il2cpp_bindgen"
+version = "0.1.0"
+authors = ["Raphaël Thériault <raphael_theriault@outlook.com>"]
+edition = "2018"
+license = "MIT"
+
+[dependencies]
+structopt = "0.3.9"
