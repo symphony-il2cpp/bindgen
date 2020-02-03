@@ -1,7 +1,5 @@
-// TODO: impl ToTokens instead of Display
-
-use proc_macro2::{Ident, TokenStream};
-use quote::{format_ident, quote};
+use proc_macro2::TokenStream;
+use quote::{format_ident, quote, ToTokens};
 use std::{collections::HashSet, convert::Infallible, fmt, str::FromStr};
 
 #[derive(Copy, Clone, Eq, PartialEq, Hash, Debug)]
@@ -18,9 +16,9 @@ pub enum Type {
     F64,
     ISize,
     Usize,
+    Unit,
     String,
     Object,
-    Unit,
     Unknown,
 }
 
@@ -65,9 +63,9 @@ impl From<&str> for Type {
             "double" | "Double" | "System.Double" => Self::F64,
             "IntPtr" | "System.IntPtr" => Self::ISize,
             "UintPtr" | "System.UIntPtr" => Self::Usize,
+            "void" | "Void" | "System.Void" => Self::Unit,
             "string" | "String" | "System.String" => Self::String,
             "object" | "Object" | "System.Object" => Self::Object,
-            "void" | "Void" | "System.Void" => Self::Unit,
             _ => Self::Unknown,
         }
     }
@@ -81,39 +79,36 @@ impl FromStr for Type {
     }
 }
 
-impl Into<&'static str> for Type {
-    fn into(self) -> &'static str {
+impl ToTokens for Type {
+    fn to_tokens(&self, tokens: &mut TokenStream) {
         match self {
-            Self::I8 => "i8",
-            Self::U8 => "u8",
-            Self::I16 => "i16",
-            Self::U16 => "u16",
-            Self::I32 => "i32",
-            Self::U32 => "u32",
-            Self::I64 => "i64",
-            Self::U64 => "u64",
-            Self::F32 => "f32",
-            Self::F64 => "f64",
-            Self::ISize => "isize",
-            Self::Usize => "usize",
-            Self::String => "*mut symphony_il2cpp::types::Il2CppString",
-            Self::Object => "*mut symphony_il2cpp::types::Il2CppObject",
-            Self::Unit => "()",
-            Self::Unknown => "*mut std::ffi::c_void",
+            Self::I8 => tokens.extend(quote! {i8}),
+            Self::U8 => tokens.extend(quote! {u8}),
+            Self::I16 => tokens.extend(quote! {i16}),
+            Self::U16 => tokens.extend(quote! {u16}),
+            Self::I32 => tokens.extend(quote! {i32}),
+            Self::U32 => tokens.extend(quote! {u32}),
+            Self::I64 => tokens.extend(quote! {i64}),
+            Self::U64 => tokens.extend(quote! {u64}),
+            Self::F32 => tokens.extend(quote! {f32}),
+            Self::F64 => tokens.extend(quote! {f64}),
+            Self::ISize => tokens.extend(quote! {isize}),
+            Self::Usize => tokens.extend(quote! {usize}),
+            Self::Unit => tokens.extend(quote! {()}),
+            Self::String => {
+                tokens.extend(quote! {*mut symphony_il2cpp::types::Il2CppString});
+            }
+            Self::Object => tokens.extend(quote! {*mut symphony_il2cpp::types::Il2CppObject}),
+            Self::Unknown => tokens.extend(quote! {*mut std::ffi::c_void}),
         }
     }
 }
 
-impl fmt::Display for Type {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> Result<(), fmt::Error> {
-        let s: &str = (*self).into();
-        write!(f, "{}", s)
-    }
-}
-
-impl fmt::Display for Variable {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> Result<(), fmt::Error> {
-        write!(f, "{}: {}", self.name, self.t)
+impl ToTokens for Variable {
+    fn to_tokens(&self, tokens: &mut TokenStream) {
+        let name = format_ident!("{}", self.name);
+        let t = self.t;
+        tokens.extend(quote! {#name: #t})
     }
 }
 
@@ -121,29 +116,18 @@ impl fmt::Display for Class {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> Result<(), fmt::Error> {
         let namespace_str = self.namespace.join(".");
         let name = format_ident!("{}", self.name);
+        let fields_name = format_ident!("fields_{}", self.name);
         let name_str = &self.name;
 
-        let field_names: Vec<Ident> = self
-            .fields
-            .iter()
-            .map(|f| format_ident!("{}", f.name))
-            .collect();
-        let field_types: Vec<TokenStream> = self
-            .fields
-            .iter()
-            .map(|f| {
-                let s: &str = f.t.into();
-                quote! {#s}
-            })
-            .collect();
+        let fields = self.fields.iter();
         let fields = quote! {
-            #(pub #field_names: #field_types),*
+            #(pub #fields),*
         };
 
         let struct_def = quote! {
             #[repr(align(8))]
             #[derive(Copy, Clone, Debug)]
-            pub struct fields_#name {
+            pub struct #fields_name {
                 #fields
             }
 
@@ -151,7 +135,7 @@ impl fmt::Display for Class {
             pub struct #name {
                 pub inner: *mut symphony_il2cpp::types::Il2CppObject,
                 pub class: *mut symphony_il2cpp::types::Il2CppClass,
-                pub fields: Option<fields_#name>,
+                pub fields: Option<#fields_name>,
             }
 
             impl std::convert::TryFrom<*mut symphony_il2cpp::types::Il2CppObject> for #name {
