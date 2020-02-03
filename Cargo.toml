@@ -6,5 +6,6 @@ edition = "2018"
 license = "MIT"
 
 [dependencies]
+proc-macro2 = "1.0"
 quote = "1.0"
 structopt = "0.3.9"

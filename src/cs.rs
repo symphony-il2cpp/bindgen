@@ -1,8 +1,11 @@
+// TODO: impl ToTokens instead of Display
+
+use proc_macro2::{Ident, TokenStream};
 use quote::{format_ident, quote};
 use std::{collections::HashSet, convert::Infallible, fmt, str::FromStr};
 
 #[derive(Copy, Clone, Eq, PartialEq, Hash, Debug)]
-enum Type {
+pub enum Type {
     I8,
     U8,
     I16,
@@ -22,29 +25,29 @@ enum Type {
 }
 
 #[derive(Clone, Eq, PartialEq, Hash, Debug)]
-struct Variable {
-    t: Type,
-    name: String,
+pub struct Variable {
+    pub t: Type,
+    pub name: String,
 }
 
-type Args = Vec<Variable>;
+pub type Args = Vec<Variable>;
 #[derive(Clone, Eq, PartialEq, Hash, Debug)]
-struct Method {
+pub struct Method {
     t: Type,
     name: String,
     this: bool,
     args: Args,
 }
 
-type Namespace = Vec<String>;
-type Fields = HashSet<Variable>;
-type Methods = HashSet<Method>;
+pub type Namespace = Vec<String>;
+pub type Fields = HashSet<Variable>;
+pub type Methods = HashSet<Method>;
 #[derive(Clone, Debug)]
-struct Class {
-    namespace: Namespace,
-    name: String,
-    fields: Fields,
-    methods: Methods,
+pub struct Class {
+    pub namespace: Namespace,
+    pub name: String,
+    pub fields: Fields,
+    pub methods: Methods,
 }
 
 impl From<&str> for Type {
@@ -116,13 +119,23 @@ impl fmt::Display for Variable {
 
 impl fmt::Display for Class {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> Result<(), fmt::Error> {
-        let namespace = self.namespace.join(".");
-        let namespace = format_ident!("{}", namespace);
+        let namespace_str = self.namespace.join(".");
+        let name = format_ident!("{}", self.name);
+        let name_str = &self.name;
 
-        let name = &self.name;
-
-        let field_names = self.fields.iter().map(|f| f.name);
-        let field_types = self.fields.iter().map(|f| f.t.into());
+        let field_names: Vec<Ident> = self
+            .fields
+            .iter()
+            .map(|f| format_ident!("{}", f.name))
+            .collect();
+        let field_types: Vec<TokenStream> = self
+            .fields
+            .iter()
+            .map(|f| {
+                let s: &str = f.t.into();
+                quote! {#s}
+            })
+            .collect();
         let fields = quote! {
             #(pub #field_names: #field_types),*
         };
@@ -145,7 +158,7 @@ impl fmt::Display for Class {
                 type Error = symphony_il2cpp::error::Error;
 
                 fn try_from(value: *mut symphony_il2cpp::types::Il2CppObject) -> Result<Self, Self::Error> {{
-                    let class = symphony_il2cpp::utils::get_class_from_name(#namespace, #name)?;
+                    let class = symphony_il2cpp::utils::get_class_from_name(#namespace_str, #name_str)?;
                     Ok(Self {{
                         inner: value,
                         class,
@@ -154,5 +167,7 @@ impl fmt::Display for Class {
                 }}
             }
         };
+
+        write!(f, "{}", struct_def)
     }
 }
