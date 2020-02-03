@@ -7,6 +7,9 @@ use structopt::StructOpt;
 struct Opt {
     #[structopt(name = "FILES")]
     input: Vec<PathBuf>,
+
+    #[structopt(short, long)]
+    format: bool,
 }
 
 fn main() {

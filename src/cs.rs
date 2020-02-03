@@ -1,5 +1,5 @@
-use std::convert::Infallible;
-use std::{collections::HashSet, fmt, str::FromStr};
+use quote::{format_ident, quote};
+use std::{collections::HashSet, convert::Infallible, fmt, str::FromStr};
 
 #[derive(Copy, Clone, Eq, PartialEq, Hash, Debug)]
 enum Type {
@@ -27,20 +27,24 @@ struct Variable {
     name: String,
 }
 
+type Args = Vec<Variable>;
 #[derive(Clone, Eq, PartialEq, Hash, Debug)]
 struct Method {
     t: Type,
     name: String,
     this: bool,
-    args: Vec<Variable>,
+    args: Args,
 }
 
+type Namespace = Vec<String>;
+type Fields = HashSet<Variable>;
+type Methods = HashSet<Method>;
 #[derive(Clone, Debug)]
 struct Class {
-    namespace: Vec<String>,
+    namespace: Namespace,
     name: String,
-    fields: HashSet<Variable>,
-    methods: HashSet<Method>,
+    fields: Fields,
+    methods: Methods,
 }
 
 impl From<&str> for Type {
@@ -107,5 +111,48 @@ impl fmt::Display for Type {
 impl fmt::Display for Variable {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> Result<(), fmt::Error> {
         write!(f, "{}: {}", self.name, self.t)
+    }
+}
+
+impl fmt::Display for Class {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> Result<(), fmt::Error> {
+        let namespace = self.namespace.join(".");
+        let namespace = format_ident!("{}", namespace);
+
+        let name = &self.name;
+
+        let field_names = self.fields.iter().map(|f| f.name);
+        let field_types = self.fields.iter().map(|f| f.t.into());
+        let fields = quote! {
+            #(pub #field_names: #field_types),*
+        };
+
+        let struct_def = quote! {
+            #[repr(align(8))]
+            #[derive(Copy, Clone, Debug)]
+            pub struct fields_#name {
+                #fields
+            }
+
+            #[derive(Copy, Clone, Debug)]
+            pub struct #name {
+                pub inner: *mut symphony_il2cpp::types::Il2CppObject,
+                pub class: *mut symphony_il2cpp::types::Il2CppClass,
+                pub fields: Option<fields_#name>,
+            }
+
+            impl std::convert::TryFrom<*mut symphony_il2cpp::types::Il2CppObject> for #name {
+                type Error = symphony_il2cpp::error::Error;
+
+                fn try_from(value: *mut symphony_il2cpp::types::Il2CppObject) -> Result<Self, Self::Error> {{
+                    let class = symphony_il2cpp::utils::get_class_from_name(#namespace, #name)?;
+                    Ok(Self {{
+                        inner: value,
+                        class,
+                        fields: None,
+                    }})
+                }}
+            }
+        };
     }
 }
