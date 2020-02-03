@@ -1,7 +1,7 @@
 use std::convert::Infallible;
-use std::str::FromStr;
+use std::{collections::HashSet, fmt, str::FromStr};
 
-#[derive(Copy, Clone, Debug)]
+#[derive(Copy, Clone, Eq, PartialEq, Hash, Debug)]
 enum Type {
     I8,
     U8,
@@ -19,6 +19,28 @@ enum Type {
     Object,
     Unit,
     Unknown,
+}
+
+#[derive(Clone, Eq, PartialEq, Hash, Debug)]
+struct Variable {
+    t: Type,
+    name: String,
+}
+
+#[derive(Clone, Eq, PartialEq, Hash, Debug)]
+struct Method {
+    t: Type,
+    name: String,
+    this: bool,
+    args: Vec<Variable>,
+}
+
+#[derive(Clone, Debug)]
+struct Class {
+    namespace: Vec<String>,
+    name: String,
+    fields: HashSet<Variable>,
+    methods: HashSet<Method>,
 }
 
 impl From<&str> for Type {
@@ -72,5 +94,18 @@ impl Into<&'static str> for Type {
             Self::Unit => "()",
             Self::Unknown => "*mut std::ffi::c_void",
         }
+    }
+}
+
+impl fmt::Display for Type {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> Result<(), fmt::Error> {
+        let s: &str = (*self).into();
+        write!(f, "{}", s)
+    }
+}
+
+impl fmt::Display for Variable {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> Result<(), fmt::Error> {
+        write!(f, "{}: {}", self.name, self.t)
     }
 }
